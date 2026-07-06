@@ -1,66 +1,42 @@
-# 1025 Wilson
+# The Wilson Centre — 1025wilson.ca
 
-**A premium commercial marketing website.**
-For-sale commercial units at 1025 Wilson Street West, Ancaster, Ontario.
-Delivered by Elite Developments.
+Static marketing site for The Wilson Centre (1025 Wilson Street West, Ancaster), by Elite Developments. Hosted on GitHub Pages.
 
-Live at: [1025wilson.ca](https://1025wilson.ca)
+## Deployment
 
----
+Upload **all files in this folder to the root** of the GitHub Pages repository, replacing existing files. GitHub Pages serves them automatically. No build step.
 
-## What's in this repo
+The `CNAME` file maps the site to `1025wilson.ca` — leave it in place. In the repo Settings → Pages, ensure the custom domain shows `1025wilson.ca` and "Enforce HTTPS" is on.
 
-- `index.html` - the complete, standalone marketing site
-- `og.jpg` - social share image referenced by the Open Graph and Twitter tags (keep it at the repo root so `https://1025wilson.ca/og.jpg` resolves)
-- `404.html` - branded not-found page
-- `CNAME` - custom domain (1025wilson.ca)
-- `robots.txt` / `sitemap.xml` - search indexing
-- `.gitignore`
+## File manifest
 
-All images, logos, the favicon, styles, JavaScript, and the interactive map are bundled inside `index.html`. No build step, no dependencies, no assets folder. The only file that lives outside `index.html` is `og.jpg`, used purely for link previews on social and messaging apps.
+| File | Purpose |
+|------|---------|
+| `index.html` | The full website (self-contained; all imagery embedded) |
+| `404.html` | Branded not-found page (GitHub Pages serves it automatically) |
+| `The-Wilson-Centre-eBrochure.pdf` | Web brochure — linked from the nav "Brochure" button and footer |
+| `og.jpg` | Social share image (1200×675), referenced by Open Graph / Twitter meta |
+| `favicon.ico` | Legacy multi-size favicon |
+| `favicon-16/32/48/180/192/512.png` | Modern PNG favicons + Apple touch icon |
+| `maskable-192/512.png` | Android maskable PWA icons |
+| `site.webmanifest` | PWA manifest (name, icons, theme colour) |
+| `robots.txt` | Allows all crawlers; points to the sitemap |
+| `sitemap.xml` | Sitemap for search engines |
+| `CNAME` | Custom domain binding for GitHub Pages |
+| `.nojekyll` | Tells GitHub Pages to skip Jekyll processing (serves files as-is) |
 
-External resources loaded at runtime:
-- Google Fonts (Cormorant Garamond, Inter, Barlow Condensed)
-- Leaflet 1.9.4 + CARTO tiles (interactive neighbourhood map)
+## SEO already in place (in `index.html` `<head>`)
 
----
+- Title, meta description, keywords, author, robots
+- Canonical URL `https://1025wilson.ca/`
+- Open Graph (title, description, url, image + alt + type, locale, site_name)
+- Twitter Card (summary_large_image)
+- Geo meta (region, placename, coordinates, ICBM)
+- `theme-color`, `format-detection`
+- Two JSON-LD blocks: `RealEstateListing` and a graph of `Organization` + `WebSite` + `Place`
 
-## This revision
+## Notes
 
-- **Flexible Uses section:** rebuilt with six images, one per use, each captioned to match the list (Medical & Surgical, Professional Office, Financial & Legal, Dental & Wellness, Ground-Floor Retail, Invest & Lease). On desktop the six sit in a two-by-three gallery beside the use ledger; on mobile they stack two-up beneath it.
-- **Menu logo:** enlarged for stronger presence in the navigation (54px on desktop, 44px on mobile), legible in both the transparent and scrolled states.
-- **Mobile pass:** verified at 390px. No horizontal overflow, the hero scrim keeps the light text readable over the rendering, and the new gallery and captions render cleanly.
-- `og.jpg` regenerated from the hero rendering at 1200x675.
-
----
-
-## Deploying to GitHub Pages
-
-1. Commit `index.html`, `og.jpg`, `CNAME`, `404.html`, `robots.txt`, `sitemap.xml`, and `.gitignore` to the repository root under the `officialrevmedia` account.
-2. **Settings -> Pages -> Source:** Deploy from a branch -> `main` -> `/ (root)` -> **Save**.
-3. Confirm the custom domain shows `1025wilson.ca` and that HTTPS is enforced.
-4. Keep `og.jpg` at the root so link previews render correctly.
-
-DNS at the registrar:
-
-```
-A      @    185.199.108.153
-A      @    185.199.109.153
-A      @    185.199.110.153
-A      @    185.199.111.153
-CNAME  www  officialrevmedia.github.io
-```
-
-## Updating later
-- **Brochure:** link the Brochure button by searching `id="brochureBtn"` in `index.html` and giving the anchor an `href` to the PDF.
-- **Uses imagery:** the six use photos live in the `uses-figs` block in `index.html`. Replace any `<img>` source in that block to swap a photo.
-
----
-
-## Contact
-
-- **Elite Developments** - Burlington, Ontario
-- **Sales** - sales@elitedevelopments.com
-- **Web** - [elitedevelopments.com](https://www.elitedevelopments.com)
-
-© 2026 Elite Wilson Holdings Inc. All Rights Reserved.
+- After deploying, submit `https://1025wilson.ca/sitemap.xml` in Google Search Console.
+- If you change the OG image, keep it at `/og.jpg` (1200×675) or update the meta tags.
+- The registration forms open a pre-filled email to the sales team (mailto). No backend required.
