@@ -147,12 +147,29 @@
 <li><span class="k">Email</span><a href="mailto:sales@elitedevelopments.com">sales@elitedevelopments.com</a></li>
 </ul>
 </div>
-<div class="ac-embed" id="register-form">
-<div class="_form_6"></div><script src="https://elitedevelopments.activehosted.com/f/embed.php?id=6" charset="utf-8" async></script>
-<p class="ac-loading" role="status"><span class="spin" aria-hidden="true"></span>Loading the registration form</p>
-<p class="ac-fallback" hidden>The form didn’t load. Call <a href="tel:+18444844184">1.844.484.4184</a> or email <a href="mailto:sales@elitedevelopments.com">sales@elitedevelopments.com</a> and we’ll register you right away.</p>
-<noscript><p>Please call <a href="tel:+18444844184">1.844.484.4184</a> or email <a href="mailto:sales@elitedevelopments.com">sales@elitedevelopments.com</a> to register.</p></noscript>
+<form class="form" id="register-form" novalidate aria-labelledby="register-title">
+<div class="row">
+<div class="field"><label for="f-first">First name</label><input id="f-first" name="firstname" type="text" autocomplete="given-name" required aria-describedby="f-first-err"><span class="err" id="f-first-err" aria-live="polite"></span></div>
+<div class="field"><label for="f-last">Last name</label><input id="f-last" name="lastname" type="text" autocomplete="family-name" required aria-describedby="f-last-err"><span class="err" id="f-last-err" aria-live="polite"></span></div>
 </div>
+<div class="row">
+<div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" required aria-describedby="f-email-err"><span class="err" id="f-email-err" aria-live="polite"></span></div>
+<div class="field"><label for="f-phone">Phone <span class="opt">(optional)</span></label><input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" aria-describedby="f-phone-err"><span class="err" id="f-phone-err" aria-live="polite"></span></div>
+</div>
+<div class="row">
+<div class="field"><label for="f-role">I am</label><select id="f-role" name="role">
+<option>Buying to occupy</option><option>An investor</option><option>Broker or agent</option><option>Other</option></select></div>
+<div class="field"><label for="f-size">Space I need</label><select id="f-size" name="size">
+<option>Not sure yet</option><option>800 to 1,500 SF</option><option>1,500 to 3,000 SF</option><option>3,000 to 6,000 SF</option><option>A full floor (up to 17,500 SF)</option></select></div>
+</div>
+<div class="field" id="brokerage-row" hidden><label for="f-brokerage">Brokerage</label><input id="f-brokerage" name="brokerage" type="text" autocomplete="organization" aria-describedby="f-brokerage-err"><span class="err" id="f-brokerage-err" aria-live="polite"></span></div>
+<div class="field"><label for="f-message">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-message" name="message" rows="4"></textarea></div>
+<div class="hp" aria-hidden="true"><label for="f-website">Website</label><input id="f-website" name="company_website" type="text" tabindex="-1" autocomplete="off"></div>
+<div class="check"><input id="f-consent" name="consent" type="checkbox"><label for="f-consent" id="consent-label">Yes, I’d like to receive emails and phone calls from Elite Developments about The Wilson Centre and other Elite projects. You can unsubscribe at any time.</label></div>
+<button class="btn btn-primary" type="submit" aria-busy="false"><span class="spin" aria-hidden="true"></span><span class="label">Request pricing</span></button>
+<p class="form-status" id="form-status" role="status" aria-live="polite" hidden></p>
+<p class="fine">Elite Developments, 3410 South Service Road, Suite 102, Burlington, ON L7N 3T2. 1.844.484.4184. We use your details to respond to your request, as described in our <a href="/privacy/">privacy policy</a>.</p>
+</form>
 </div></div>
 </section>
 </main>

@@ -7,18 +7,11 @@
     // Google Analytics 4 measurement ID, e.g. 'G-ABC123XYZ9'. Leave empty to disable analytics.
     GA_ID: '',
 
-    // ActiveCampaign form. Create the Wilson form in AC (Website > Forms), then put its number here.
-    // Until it is set, the form falls back to opening a pre-filled email to the sales team.
-    AC_ENDPOINT: 'https://elitedevelopments.activehosted.com/proc.php',
-    AC_FORM_ID: '6',
-
-    // Optional AC custom field IDs for the extra form answers. Leave null to skip a field.
-    AC_FIELDS: {
-      role: null,       // e.g. 'Purchaser Type'
-      size: null,       // e.g. 'Desired Size'
-      brokerage: null,  // e.g. 'Brokerage'
-      message: null     // e.g. 'Notes'
-    },
+    // Registrations are emailed to the sales inbox through FormSubmit (formsubmit.co).
+    // The FIRST submission sends an "Activate Form" email to this inbox. Click it once and every
+    // registration after that is delivered. After activating, you can swap the address in this URL
+    // for the random alias FormSubmit gives you.
+    FORM_ENDPOINT: 'https://formsubmit.co/ajax/sales@elitedevelopments.com',
 
     SALES_EMAIL: 'sales@elitedevelopments.com',
     SALES_PHONE: '1-844-484-4184',
@@ -187,4 +180,120 @@
       mo.observe(acBox, { childList: true, subtree: true });
     }
   }
+
+  /* ---------- registration form: emailed to sales ---------- */
+  var form = doc.getElementById('register-form');
+  if (!form || form.tagName !== 'FORM') return;
+
+  var btn = form.querySelector('button[type="submit"]');
+  var btnLabel = btn.querySelector('.label');
+  var statusBox = doc.getElementById('form-status');
+  var role = form.elements.role;
+  var brokerRow = doc.getElementById('brokerage-row');
+
+  function syncBroker() {
+    var isBroker = role.value === 'Broker or agent';
+    brokerRow.hidden = !isBroker;
+  }
+  role.addEventListener('change', syncBroker);
+  syncBroker();
+
+  function setErr(el, msg) {
+    var box = doc.getElementById(el.id + '-err');
+    if (msg) { el.setAttribute('aria-invalid', 'true'); if (box) box.textContent = msg; }
+    else { el.removeAttribute('aria-invalid'); if (box) box.textContent = ''; }
+  }
+  function status(html, kind) {
+    statusBox.innerHTML = html;
+    statusBox.className = 'form-status ' + (kind === 'error' ? 'is-error' : 'is-info');
+    statusBox.hidden = false;
+  }
+  function busy(on) {
+    btn.disabled = on;
+    btn.setAttribute('aria-busy', on ? 'true' : 'false');
+    btnLabel.textContent = on ? 'Sending' : 'Request pricing';
+  }
+  ['firstname', 'lastname', 'email', 'phone', 'brokerage'].forEach(function (n) {
+    var el = form.elements[n];
+    if (el) el.addEventListener('input', function () { if (el.getAttribute('aria-invalid')) setErr(el, ''); });
+  });
+
+  function validate() {
+    var first = null;
+    function need(el, msg) { if (!el.value.trim()) { setErr(el, msg); first = first || el; } else setErr(el, ''); }
+    need(form.elements.firstname, 'Please enter your first name.');
+    need(form.elements.lastname, 'Please enter your last name.');
+    var em = form.elements.email;
+    if (!em.value.trim()) { setErr(em, 'Please enter your email.'); first = first || em; }
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em.value.trim())) { setErr(em, 'Please check the email address.'); first = first || em; }
+    else setErr(em, '');
+    var ph = form.elements.phone;
+    if (ph.value.trim() && ph.value.replace(/\D/g, '').length < 10) { setErr(ph, 'Please enter a 10-digit phone number.'); first = first || ph; }
+    else setErr(ph, '');
+    if (!brokerRow.hidden) need(form.elements.brokerage, 'Please enter your brokerage.');
+    return first;
+  }
+
+  function payload() {
+    var f = form.elements;
+    var name = f.firstname.value.trim() + ' ' + f.lastname.value.trim();
+    var data = {
+      _subject: 'The Wilson Centre: new registration from ' + name,
+      _template: 'table',
+      _captcha: 'false',
+      'Name': name,
+      'email': f.email.value.trim(),
+      'Phone': f.phone.value.trim() || 'Not given',
+      'I am': f.role.value,
+      'Space needed': f.size.value,
+      'Brokerage': brokerRow.hidden ? '' : f.brokerage.value.trim(),
+      'Message': f.message.value.trim(),
+      'Email and phone consent': f.consent.checked ? 'Yes (' + SETTINGS.CONSENT_VERSION + ')' : 'No',
+      'Traffic source': trafficSource(),
+      'Original campaign': firstCampaign(),
+      'utm_source': attr('utm_source'),
+      'utm_medium': attr('utm_medium'),
+      'utm_campaign': attr('utm_campaign'),
+      'utm_content': attr('utm_content'),
+      'utm_term': attr('utm_term'),
+      'Google click ID': attr('gclid'),
+      'Page': location.href,
+      'Submitted': new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto' })
+    };
+    Object.keys(data).forEach(function (k) { if (data[k] === '') delete data[k]; });
+    return data;
+  }
+
+  function mailtoLink(d) {
+    var lines = Object.keys(d).filter(function (k) { return k.charAt(0) !== '_'; }).map(function (k) { return k + ': ' + d[k]; });
+    return 'mailto:' + SETTINGS.SALES_EMAIL + '?subject=' + encodeURIComponent(d._subject) + '&body=' + encodeURIComponent(lines.join('\n'));
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    statusBox.hidden = true;
+    if (form.elements.company_website.value) return; // bot trap
+    var bad = validate();
+    if (bad) { bad.focus(); status('Please fix the highlighted fields.', 'error'); return; }
+    var d = payload();
+    busy(true);
+    var done = false;
+    var timer = setTimeout(function () { if (!done) fail(); }, 15000);
+    function fail() {
+      done = true; clearTimeout(timer); busy(false);
+      status('We couldn’t send your request just now. <a href="' + mailtoLink(d) + '">Email it to us instead</a> or call <a href="tel:+18444844184">' + SETTINGS.SALES_PHONE + '</a>.', 'error');
+    }
+    fetch(SETTINGS.FORM_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(d)
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (done) return;
+      if (res && (res.success === true || res.success === 'true')) {
+        done = true; clearTimeout(timer);
+        try { sessionStorage.setItem('wc_lead', '1'); } catch (err) {}
+        window.location.href = SETTINGS.THANK_YOU;
+      } else fail();
+    }).catch(function () { if (!done) fail(); });
+  });
 })();
