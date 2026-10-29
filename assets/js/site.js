@@ -76,14 +76,14 @@
     if (m && !m.contains(e.target)) m.removeAttribute('open');
   });
 
-  /* calls, emails, brochure */
+  /* calls, emails, file downloads */
   doc.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[href]');
     if (!a) return;
     var href = a.getAttribute('href');
     if (href.indexOf('tel:') === 0) track('click_to_call', { link_url: href, page_location: location.pathname });
     else if (href.indexOf('mailto:') === 0) track('click_email', { link_url: href });
-    else if (/\.pdf($|\?)/i.test(href)) track('brochure_download', { file_name: href.split('/').pop() });
+    else if (/\.pdf($|\?)/i.test(href)) track('file_download', { file_name: href.split('/').pop() });
   });
 
   /* lead event on the thank-you page, only after a real submit */
