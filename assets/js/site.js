@@ -140,10 +140,11 @@
   function trafficSource() { return getCookie('wc_first_source') || labelFor(attr('utm_source'), attr('utm_medium'), !!attr('gclid'), doc.referrer); }
   function firstCampaign() { return getCookie('wc_first_campaign') || attr('utm_campaign'); }
 
-  /* ---------- ActiveCampaign embedded form (form 6) ---------- */
-  var acBox = doc.querySelector('.ac-embed[data-ac-src]');
+  /* ---------- ActiveCampaign embedded form (form 6) ----------
+     The AC script is loaded straight from the page HTML, so the form appears even if this file is cached or blocked.
+     This only adds prefill, the loading state and the fallback message. */
+  var acBox = doc.querySelector('.ac-embed');
   if (acBox) {
-    var acLoaded = false;
     var AC_PREFILL = {            // AC hidden-field ID : value. Fields only fill if they exist on the AC form.
       'field[9]': function () { return 'The Wilson Centre'; },
       'field[2]': function () { return 'The Wilson Centre'; },
@@ -152,197 +153,38 @@
       'field[63]': function () { return attr('gclid'); },
       'field[51]': function () { return location.href; }
     };
-    function prefill(root) {
+    var prefill = function (root) {
       Object.keys(AC_PREFILL).forEach(function (n) {
         var el = root.querySelector('input[name="' + n + '"]');
         if (el && !el.value) el.value = AC_PREFILL[n]() || '';
       });
-      ATTR_KEYS.forEach(function (k) {            // hidden fields named after the UTM keys, if added
+      ATTR_KEYS.forEach(function (k) {
         var el = root.querySelector('input[name="' + k + '"], input[data-name="' + k + '"]');
         if (el && !el.value) el.value = attr(k);
       });
-    }
-    function loadAC() {
-      if (acLoaded) return; acLoaded = true;
-      var sc = doc.createElement('script');
-      sc.src = acBox.getAttribute('data-ac-src'); sc.charset = 'utf-8'; sc.async = true;
-      sc.onerror = fail;
-      doc.body.appendChild(sc);
-      var timer = setTimeout(fail, 12000);
+    };
+    var ready = function (f) {
+      acBox.classList.add('is-ready');
+      prefill(f);
+      f.addEventListener('submit', function () {
+        prefill(f);
+        try { sessionStorage.setItem('wc_lead', '1'); } catch (e) {}
+      }, true);
+    };
+    var existing = acBox.querySelector('form');
+    if (existing) ready(existing);
+    else {
+      var timer = setTimeout(function () {
+        if (acBox.classList.contains('is-ready')) return;
+        acBox.classList.add('is-failed');
+        acBox.querySelector('.ac-fallback').hidden = false;
+      }, 15000);
       var mo = new MutationObserver(function () {
         var f = acBox.querySelector('form');
         if (!f) return;
-        clearTimeout(timer); mo.disconnect();
-        acBox.classList.add('is-ready');
-        prefill(f);
-        f.addEventListener('submit', function () {
-          prefill(f);
-          try { sessionStorage.setItem('wc_lead', '1'); } catch (e) {}
-        });
+        clearTimeout(timer); mo.disconnect(); ready(f);
       });
       mo.observe(acBox, { childList: true, subtree: true });
     }
-    function fail() {
-      if (acBox.classList.contains('is-ready')) return;
-      acBox.classList.add('is-failed');
-      acBox.querySelector('.ac-fallback').hidden = false;
-    }
-    // Load right away on the register page, or as the form nears the screen elsewhere
-    if (doc.body.getAttribute('data-page') === 'register' || !('IntersectionObserver' in window)) loadAC();
-    else {
-      var io = new IntersectionObserver(function (es) {
-        if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); loadAC(); }
-      }, { rootMargin: '600px 0px' });
-      io.observe(acBox);
-    }
   }
-
-  /* ---------- legacy custom form (not used while the AC embed is live) ---------- */
-  var form = doc.getElementById('register-form');
-  if (!form || form.tagName !== 'FORM') return;
-
-  var btn = form.querySelector('button[type="submit"]');
-  var btnLabel = btn.querySelector('.label');
-  var statusBox = doc.getElementById('form-status');
-  var role = form.elements.role;
-  var brokerRow = doc.getElementById('brokerage-row');
-
-  function syncBroker() {
-    var isBroker = role.value === 'Broker or agent';
-    brokerRow.hidden = !isBroker;
-    form.elements.brokerage.required = isBroker;
-  }
-  role.addEventListener('change', syncBroker);
-  syncBroker();
-
-  function setErr(el, msg) {
-    var box = doc.getElementById(el.id + '-err');
-    if (msg) { el.setAttribute('aria-invalid', 'true'); if (box) box.textContent = msg; }
-    else { el.removeAttribute('aria-invalid'); if (box) box.textContent = ''; }
-  }
-  function status(msg, kind) {
-    statusBox.textContent = msg;
-    statusBox.className = 'form-status ' + (kind === 'error' ? 'is-error' : 'is-info');
-    statusBox.hidden = false;
-  }
-  function busy(on) {
-    btn.disabled = on;
-    btn.setAttribute('aria-busy', on ? 'true' : 'false');
-    btnLabel.textContent = on ? 'Sending' : 'Request pricing';
-  }
-
-  ['firstname', 'lastname', 'email', 'phone', 'brokerage'].forEach(function (n) {
-    var el = form.elements[n];
-    if (el) el.addEventListener('input', function () { if (el.getAttribute('aria-invalid')) setErr(el, ''); });
-  });
-
-  function validate() {
-    var first = null;
-    function need(el, msg) { if (!el.value.trim()) { setErr(el, msg); first = first || el; } else setErr(el, ''); }
-    need(form.elements.firstname, 'Please enter your first name.');
-    need(form.elements.lastname, 'Please enter your last name.');
-    var em = form.elements.email;
-    if (!em.value.trim()) { setErr(em, 'Please enter your email.'); first = first || em; }
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em.value.trim())) { setErr(em, 'Please check the email address.'); first = first || em; }
-    else setErr(em, '');
-    var ph = form.elements.phone;
-    if (ph.value.trim() && ph.value.replace(/\D/g, '').length < 10) { setErr(ph, 'Please enter a 10-digit phone number.'); first = first || ph; }
-    else setErr(ph, '');
-    if (!brokerRow.hidden) need(form.elements.brokerage, 'Please enter your brokerage.');
-    return first;
-  }
-
-  function values() {
-    var f = form.elements;
-    return {
-      firstname: f.firstname.value.trim(), lastname: f.lastname.value.trim(),
-      email: f.email.value.trim(), phone: f.phone.value.trim(),
-      role: f.role.value, size: f.size.value,
-      brokerage: brokerRow.hidden ? '' : f.brokerage.value.trim(),
-      message: f.message.value.trim(), consent: f.consent.checked
-    };
-  }
-
-  function pad(n) { return n < 10 ? '0' + n : '' + n; }
-  function dateStr(d) { return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + d.getFullYear(); }
-  function dtStr(d) {
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
-      pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  }
-
-  function sendToAC(v, done, fail) {
-    var now = new Date();
-    var wording = doc.getElementById('consent-label').textContent.trim().replace(/\s+/g, ' ');
-    var p = new URLSearchParams();
-    p.set('u', SETTINGS.AC_FORM_ID); p.set('f', SETTINGS.AC_FORM_ID);
-    p.set('act', 'sub'); p.set('v', '2'); p.set('jsonp', 'true');
-    p.set('firstname', v.firstname); p.set('lastname', v.lastname);
-    p.set('email', v.email); p.set('phone', v.phone);
-    p.set('field[9]', 'The Wilson Centre');      // Primary Community
-    p.set('field[2]', 'The Wilson Centre');      // Community of Interest
-    p.set('field[5]', trafficSource());          // Original Traffic Source
-    p.set('field[40]', firstCampaign());          // Original UTM Campaign
-    p.set('field[63]', attr('gclid'));           // Google Click ID
-    if (v.consent) p.append('field[47][]', 'Yes');
-    p.set('field[23]', dateStr(now));
-    p.set('field[48]', dtStr(now));
-    p.set('field[24]', wording);
-    p.set('field[49]', SETTINGS.CONSENT_VERSION);
-    p.set('field[41]', 'Website form');
-    var basis = v.consent ? 'Express \u2014 checkbox' : 'Implied \u2014 enquiry (expires)';
-    p.set('field[50]', basis); p.set('field[55]', basis);
-    p.set('field[51]', location.href);
-    var map = SETTINGS.AC_FIELDS;
-    ['role', 'size', 'brokerage', 'message'].forEach(function (k) {
-      if (map[k] && v[k]) p.set('field[' + map[k] + ']', v[k]);
-    });
-
-    var finished = false;
-    var s = doc.createElement('script');
-    function ok() { if (finished) return; finished = true; done(); }
-    function bad() { if (finished) return; finished = true; fail(); }
-    window._show_thank_you = ok;
-    window._show_error = bad;
-    s.onerror = bad;
-    s.src = SETTINGS.AC_ENDPOINT + '?' + p.toString();
-    doc.head.appendChild(s);
-    setTimeout(bad, 12000);
-  }
-
-  function sendByEmail(v) {
-    var lines = [
-      'Name: ' + v.firstname + ' ' + v.lastname,
-      'Email: ' + v.email,
-      'Phone: ' + (v.phone || 'not given'),
-      'I am: ' + v.role,
-      'Suite size: ' + v.size
-    ];
-    if (v.brokerage) lines.push('Brokerage: ' + v.brokerage);
-    if (v.message) lines.push('', v.message);
-    lines.push('', 'Email updates: ' + (v.consent ? 'Yes' : 'No'));
-    var href = 'mailto:' + SETTINGS.SALES_EMAIL +
-      '?subject=' + encodeURIComponent('The Wilson Centre: pricing request from ' + v.firstname + ' ' + v.lastname) +
-      '&body=' + encodeURIComponent(lines.join('\n'));
-    window.location.href = href;
-    busy(false);
-    status('Your email app should open with your details filled in. Press Send to finish, or call ' + SETTINGS.SALES_PHONE + '.', 'info');
-  }
-
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    statusBox.hidden = true;
-    if (form.elements.company_website.value) return; // bot trap
-    var bad = validate();
-    if (bad) { bad.focus(); status('Please fix the highlighted fields.', 'error'); return; }
-    var v = values();
-    busy(true);
-    if (!SETTINGS.AC_FORM_ID) { sendByEmail(v); return; }
-    sendToAC(v, function () {
-      try { sessionStorage.setItem('wc_lead', '1'); } catch (err) {}
-      window.location.href = SETTINGS.THANK_YOU;
-    }, function () {
-      busy(false);
-      status('Something went wrong on our side. Please call ' + SETTINGS.SALES_PHONE + ' and we will register you right away.', 'error');
-    });
-  });
 })();
