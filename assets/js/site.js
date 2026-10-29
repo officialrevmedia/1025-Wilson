@@ -10,7 +10,7 @@
     // ActiveCampaign form. Create the Wilson form in AC (Website > Forms), then put its number here.
     // Until it is set, the form falls back to opening a pre-filled email to the sales team.
     AC_ENDPOINT: 'https://elitedevelopments.activehosted.com/proc.php',
-    AC_FORM_ID: '5',
+    AC_FORM_ID: '6',
 
     // Optional AC custom field IDs for the extra form answers. Leave null to skip a field.
     AC_FIELDS: {
@@ -89,14 +89,17 @@
   /* lead event on the thank-you page, only after a real submit */
   if (doc.body.getAttribute('data-page') === 'thank-you') {
     try {
-      if (sessionStorage.getItem('wc_lead') === '1') {
+      var fromSite = doc.referrer && doc.referrer.indexOf(location.hostname) !== -1 && doc.referrer.indexOf('/thank-you') === -1;
+      if (sessionStorage.getItem('wc_lead') === '1' || fromSite) {
         sessionStorage.removeItem('wc_lead');
-        track('generate_lead', { form_id: 'wilson-register', currency: 'CAD' });
+        track('generate_lead', { form_id: 'activecampaign-6', currency: 'CAD' });
       }
     } catch (e) {}
   }
 
-  /* ---------- attribution: keep UTM / gclid for 90 days ---------- */
+  /* ---------- attribution ----------
+     Matches the Elite traffic sheet (150K V8): utm_medium is cpc, paid-social, display, qr or email.
+     "Original" fields keep the FIRST touch for 90 days; gclid keeps the latest click for Google Ads. */
   var ATTR_KEYS = ['gclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
   function setCookie(n, v) {
     var d = new Date(); d.setTime(d.getTime() + SETTINGS.COOKIE_DAYS * 864e5);
@@ -107,23 +110,96 @@
     return m ? decodeURIComponent(m[2]) : '';
   }
   var qs = new URLSearchParams(location.search);
-  ATTR_KEYS.forEach(function (k) { if (qs.get(k)) setCookie('wc_' + k, qs.get(k)); });
-  function attr(k) { return qs.get(k) || getCookie('wc_' + k) || ''; }
-  function trafficSource() {
-    var medium = attr('utm_medium').toLowerCase();
-    var source = attr('utm_source').toLowerCase();
-    if (attr('gclid') || medium === 'cpc' || medium === 'ppc' || medium === 'paid') {
-      return (source === 'facebook' || source === 'instagram' || source === 'meta') ? 'Paid Social' : 'Paid Search';
-    }
+  function labelFor(source, medium, hasGclid, referrer) {
+    source = (source || '').toLowerCase(); medium = (medium || '').toLowerCase();
+    if (medium === 'paid-social' || medium === 'paid_social' || medium === 'social-paid') return 'Paid Social';
+    if (medium === 'cpc' || medium === 'ppc' || medium === 'paid-search' || hasGclid) return 'Paid Search';
+    if (medium === 'display' || medium === 'video') return 'Paid Search';   // YouTube runs through Google Ads; AC has no display option
+    if (medium === 'qr' || medium === 'print' || medium === 'offline') return 'Offline Sources';
     if (medium === 'email') return 'Email';
     if (medium === 'organic') return 'Organic Search';
-    if (doc.referrer && doc.referrer.indexOf(location.hostname) === -1) return 'Referral';
+    if (referrer) {
+      var host = '';
+      try { host = new URL(referrer).hostname; } catch (e) {}
+      if (host && host !== location.hostname) {
+        if (/(^|\.)(google|bing|yahoo|duckduckgo|ecosia|baidu)\./.test(host)) return 'Organic Search';
+        if (/(^|\.)(facebook|instagram|linkedin|t)\.(com|co)$/.test(host) || /lnkd\.in$/.test(host)) return 'Referral';
+        return 'Referral';
+      }
+    }
     return 'Direct';
   }
+  // latest touch (used for gclid and the current visit)
+  ATTR_KEYS.forEach(function (k) { if (qs.get(k)) setCookie('wc_' + k, qs.get(k)); });
+  // first touch: set once, never overwritten
+  if (!getCookie('wc_first_source')) {
+    setCookie('wc_first_source', labelFor(qs.get('utm_source'), qs.get('utm_medium'), !!qs.get('gclid'), doc.referrer));
+    setCookie('wc_first_campaign', qs.get('utm_campaign') || '');
+  }
+  function attr(k) { return qs.get(k) || getCookie('wc_' + k) || ''; }
+  function trafficSource() { return getCookie('wc_first_source') || labelFor(attr('utm_source'), attr('utm_medium'), !!attr('gclid'), doc.referrer); }
+  function firstCampaign() { return getCookie('wc_first_campaign') || attr('utm_campaign'); }
 
-  /* ---------- registration form ---------- */
+  /* ---------- ActiveCampaign embedded form (form 6) ---------- */
+  var acBox = doc.querySelector('.ac-embed[data-ac-src]');
+  if (acBox) {
+    var acLoaded = false;
+    var AC_PREFILL = {            // AC hidden-field ID : value. Fields only fill if they exist on the AC form.
+      'field[9]': function () { return 'The Wilson Centre'; },
+      'field[2]': function () { return 'The Wilson Centre'; },
+      'field[5]': trafficSource,
+      'field[40]': firstCampaign,
+      'field[63]': function () { return attr('gclid'); },
+      'field[51]': function () { return location.href; }
+    };
+    function prefill(root) {
+      Object.keys(AC_PREFILL).forEach(function (n) {
+        var el = root.querySelector('input[name="' + n + '"]');
+        if (el && !el.value) el.value = AC_PREFILL[n]() || '';
+      });
+      ATTR_KEYS.forEach(function (k) {            // hidden fields named after the UTM keys, if added
+        var el = root.querySelector('input[name="' + k + '"], input[data-name="' + k + '"]');
+        if (el && !el.value) el.value = attr(k);
+      });
+    }
+    function loadAC() {
+      if (acLoaded) return; acLoaded = true;
+      var sc = doc.createElement('script');
+      sc.src = acBox.getAttribute('data-ac-src'); sc.charset = 'utf-8'; sc.async = true;
+      sc.onerror = fail;
+      doc.body.appendChild(sc);
+      var timer = setTimeout(fail, 12000);
+      var mo = new MutationObserver(function () {
+        var f = acBox.querySelector('form');
+        if (!f) return;
+        clearTimeout(timer); mo.disconnect();
+        acBox.classList.add('is-ready');
+        prefill(f);
+        f.addEventListener('submit', function () {
+          prefill(f);
+          try { sessionStorage.setItem('wc_lead', '1'); } catch (e) {}
+        });
+      });
+      mo.observe(acBox, { childList: true, subtree: true });
+    }
+    function fail() {
+      if (acBox.classList.contains('is-ready')) return;
+      acBox.classList.add('is-failed');
+      acBox.querySelector('.ac-fallback').hidden = false;
+    }
+    // Load right away on the register page, or as the form nears the screen elsewhere
+    if (doc.body.getAttribute('data-page') === 'register' || !('IntersectionObserver' in window)) loadAC();
+    else {
+      var io = new IntersectionObserver(function (es) {
+        if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); loadAC(); }
+      }, { rootMargin: '600px 0px' });
+      io.observe(acBox);
+    }
+  }
+
+  /* ---------- legacy custom form (not used while the AC embed is live) ---------- */
   var form = doc.getElementById('register-form');
-  if (!form) return;
+  if (!form || form.tagName !== 'FORM') return;
 
   var btn = form.querySelector('button[type="submit"]');
   var btnLabel = btn.querySelector('.label');
@@ -205,7 +281,7 @@
     p.set('field[9]', 'The Wilson Centre');      // Primary Community
     p.set('field[2]', 'The Wilson Centre');      // Community of Interest
     p.set('field[5]', trafficSource());          // Original Traffic Source
-    p.set('field[40]', attr('utm_campaign'));    // Original UTM Campaign
+    p.set('field[40]', firstCampaign());          // Original UTM Campaign
     p.set('field[63]', attr('gclid'));           // Google Click ID
     if (v.consent) p.append('field[47][]', 'Yes');
     p.set('field[23]', dateStr(now));
