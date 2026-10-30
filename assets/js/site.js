@@ -14,7 +14,7 @@
     FORM_ENDPOINT: 'https://formsubmit.co/ajax/sales@elitedevelopments.com',
 
     SALES_EMAIL: 'sales@elitedevelopments.com',
-    SALES_PHONE: '1-844-484-4184',
+    SALES_PHONE: '1.844.484.4184',
     THANK_YOU: '/thank-you/',
     CONSENT_VERSION: 'wc-2026-10',
     COOKIE_DAYS: 90
@@ -269,6 +269,25 @@
     return 'mailto:' + SETTINGS.SALES_EMAIL + '?subject=' + encodeURIComponent(d._subject) + '&body=' + encodeURIComponent(lines.join('\n'));
   }
 
+  var lastMsg = '';
+  function showSuccess(first) {
+    track('generate_lead', { form_id: 'wilson-register', currency: 'CAD' });
+    var box = doc.createElement('div');
+    box.className = 'form-success';
+    box.setAttribute('role', 'status');
+    box.setAttribute('tabindex', '-1');
+    box.innerHTML = '<span class="tick" aria-hidden="true"></span>' +
+      '<h3>Thank you' + (first ? ', ' + first.replace(/[<>&"]/g, '') : '') + '. Your request is in.</h3>' +
+      '<p>The Wilson Centre sales team will be in touch shortly with pricing and the suite package. ' +
+      'If it’s urgent, call <a href="tel:+18444844184">' + SETTINGS.SALES_PHONE + '</a>.</p>' +
+      '<p><a class="btn btn-line" href="/suites/">Explore the floors</a></p>';
+    form.replaceChildren(box);
+    form.classList.add('is-sent');
+    box.focus({ preventScroll: true });
+    var r = form.getBoundingClientRect();
+    if (r.top < 80 || r.top > window.innerHeight * 0.6) window.scrollTo({ top: window.scrollY + r.top - 100, behavior: 'smooth' });
+  }
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     statusBox.hidden = true;
@@ -277,10 +296,12 @@
     if (bad) { bad.focus(); status('Please fix the highlighted fields.', 'error'); return; }
     var d = payload();
     busy(true);
+    status('Sending your request…', 'info');
     var done = false;
     var timer = setTimeout(function () { if (!done) fail(); }, 15000);
     function fail() {
       done = true; clearTimeout(timer); busy(false);
+      if (window.console && lastMsg) console.warn('Form service response:', lastMsg);
       status('We couldn’t send your request just now. <a href="' + mailtoLink(d) + '">Email it to us instead</a> or call <a href="tel:+18444844184">' + SETTINGS.SALES_PHONE + '</a>.', 'error');
     }
     fetch(SETTINGS.FORM_ENDPOINT, {
@@ -291,9 +312,11 @@
       if (done) return;
       if (res && (res.success === true || res.success === 'true')) {
         done = true; clearTimeout(timer);
-        try { sessionStorage.setItem('wc_lead', '1'); } catch (err) {}
-        window.location.href = SETTINGS.THANK_YOU;
-      } else fail();
+        showSuccess(form.elements.firstname.value.trim());
+      } else {
+        lastMsg = (res && res.message) || '';
+        fail();
+      }
     }).catch(function () { if (!done) fail(); });
   });
 })();
