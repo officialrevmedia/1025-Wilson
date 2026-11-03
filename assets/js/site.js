@@ -270,6 +270,19 @@
   }
 
   var lastMsg = '';
+  function nativePost(d) {
+    var f = doc.createElement('form');
+    f.method = 'POST';
+    f.action = SETTINGS.FORM_ENDPOINT.replace('/ajax/', '/');
+    f.style.display = 'none';
+    d._next = location.origin + SETTINGS.THANK_YOU;
+    Object.keys(d).forEach(function (k) {
+      var i = doc.createElement('input'); i.type = 'hidden'; i.name = k; i.value = d[k]; f.appendChild(i);
+    });
+    try { sessionStorage.setItem('wc_lead', '1'); } catch (e) {}
+    doc.body.appendChild(f);
+    f.submit();
+  }
   function showSuccess(first) {
     track('generate_lead', { form_id: 'wilson-register', currency: 'CAD' });
     var box = doc.createElement('div');
@@ -302,6 +315,10 @@
     function fail() {
       done = true; clearTimeout(timer); busy(false);
       if (window.console && lastMsg) console.warn('Form service response:', lastMsg);
+      if (/activat/i.test(lastMsg)) {
+        status('This form is waiting to be activated by the sales inbox, so your request wasn’t delivered. <a href="' + mailtoLink(d) + '">Email it to us instead</a> or call <a href="tel:+18444844184">' + SETTINGS.SALES_PHONE + '</a>.', 'error');
+        return;
+      }
       status('We couldn’t send your request just now. <a href="' + mailtoLink(d) + '">Email it to us instead</a> or call <a href="tel:+18444844184">' + SETTINGS.SALES_PHONE + '</a>.', 'error');
     }
     fetch(SETTINGS.FORM_ENDPOINT, {
@@ -317,6 +334,12 @@
         lastMsg = (res && res.message) || '';
         fail();
       }
-    }).catch(function () { if (!done) fail(); });
+    }).catch(function () {
+      // Network or browser blocked the background request: fall back to a normal form post,
+      // which FormSubmit accepts and then sends the visitor to the thank-you page.
+      if (done) return;
+      done = true; clearTimeout(timer);
+      nativePost(d);
+    });
   });
 })();
