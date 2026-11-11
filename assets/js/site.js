@@ -7,6 +7,20 @@
     // Google Analytics 4 measurement ID, e.g. 'G-ABC123XYZ9'. Leave empty to disable analytics.
     GA_ID: '',
 
+    // Google Tag Manager containers (site tag, Google Ads). Load only after the visitor allows Marketing.
+    GTM_IDS: ['GTM-P9QMC7WJ', 'GTM-5XNGHMRT'],
+
+    // Meta Pixel ID. Loads only after the visitor allows Marketing.
+    META_PIXEL_ID: '1601744497840545',
+
+    // LinkedIn Insight Tag partner ID. Loads only after the visitor allows Marketing.
+    // Google Ads account and the "Wilson Centre - Registration" conversion. Load only after Marketing is allowed.
+    GOOGLE_ADS_ID: 'AW-18565483346',
+    GOOGLE_ADS_CONVERSION: 'AW-18565483346/kXvuCM2jlbUdENKW25RF',
+
+    LINKEDIN_PARTNER_ID: '9396482',
+    LINKEDIN_CONVERSION_ID: 32036778,   // fires once, on a real form submit
+
     // Registrations are emailed to the sales inbox through FormSubmit (formsubmit.co).
     // The FIRST submission sends an "Activate Form" email to this inbox. Click it once and every
     // registration after that is delivered. After activating, you can swap the address in this URL
@@ -22,26 +36,45 @@
 
   var doc = document;
 
-  /* ---------- analytics (GA4 with Consent Mode v2) ---------- */
-  var CONSENT_KEY = 'wc_consent';
-  function storedConsent() { try { return localStorage.getItem(CONSENT_KEY); } catch (e) { return null; } }
-  function storeConsent(v) { try { localStorage.setItem(CONSENT_KEY, v); } catch (e) {} }
+  /* ---------- privacy choices ----------
+     Analytics (Google Analytics 4) and Marketing (ActiveCampaign site tracking) stay OFF until the
+     visitor chooses. Nothing loads, and no cookie is set by either service, before that.
+     The choice is stored in this browser and can be changed any time from "Cookie settings" in the footer. */
+  var CONSENT_KEY = 'wc_consent_v2';
+  var AC_ACCOUNT = '802575841';
+  var AC_SCRIPT = 'https://diffuser-cdn.app-us1.com/diffuser/diffuser.js';
+
+  function readConsent() {
+    try {
+      var v = JSON.parse(localStorage.getItem(CONSENT_KEY) || 'null');
+      return v && typeof v === 'object' ? v : null;
+    } catch (e) { return null; }
+  }
+  function writeConsent(analytics, marketing) {
+    try {
+      localStorage.setItem(CONSENT_KEY, JSON.stringify({
+        analytics: !!analytics, marketing: !!marketing, v: SETTINGS.CONSENT_VERSION, t: Date.now()
+      }));
+    } catch (e) {}
+  }
 
   window.dataLayer = window.dataLayer || [];
   function gtag() { window.dataLayer.push(arguments); }
   window.gtag = window.gtag || gtag;
 
+  var analyticsOn = false, marketingOn = false, gtmOn = false, metaOn = false, liOn = false, adsOn = false;
+
+  // events are only sent once analytics is allowed, so nothing queued before consent is replayed later
   function track(name, params) {
-    if (!SETTINGS.GA_ID) return;
+    if (!SETTINGS.GA_ID || !analyticsOn) return;
     window.gtag('event', name, params || {});
   }
 
-  if (SETTINGS.GA_ID) {
-    var granted = storedConsent() === 'granted';
+  function loadAnalytics() {
+    if (analyticsOn || !SETTINGS.GA_ID) return;
+    analyticsOn = true;
     window.gtag('consent', 'default', {
-      ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
-      analytics_storage: granted ? 'granted' : 'denied',
-      wait_for_update: 500
+      ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'granted'
     });
     window.gtag('js', new Date());
     window.gtag('config', SETTINGS.GA_ID, { anonymize_ip: true });
@@ -49,19 +82,158 @@
     s.async = true;
     s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(SETTINGS.GA_ID);
     doc.head.appendChild(s);
-
-    var banner = doc.getElementById('consent');
-    if (banner && !storedConsent()) {
-      banner.hidden = false;
-      banner.addEventListener('click', function (e) {
-        var choice = e.target && e.target.getAttribute('data-consent');
-        if (!choice) return;
-        storeConsent(choice);
-        window.gtag('consent', 'update', { analytics_storage: choice === 'granted' ? 'granted' : 'denied' });
-        banner.hidden = true;
-      });
-    }
   }
+
+  function loadMeta() {
+    if (metaOn || !SETTINGS.META_PIXEL_ID) return;
+    metaOn = true;
+    (function (f, b, e, v, n, t, s) {
+      if (f.fbq) return;
+      n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      if (!f._fbq) f._fbq = n;
+      n.push = n; n.loaded = true; n.version = '2.0'; n.queue = [];
+      t = b.createElement(e); t.async = true; t.src = v;
+      s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+    })(window, doc, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    window.fbq('init', SETTINGS.META_PIXEL_ID);
+    window.fbq('track', 'PageView');
+  }
+
+  function loadLinkedIn() {
+    if (liOn || !SETTINGS.LINKEDIN_PARTNER_ID) return;
+    liOn = true;
+    window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+    window._linkedin_data_partner_ids.push(SETTINGS.LINKEDIN_PARTNER_ID);
+    (function (l) {
+      if (!l) { window.lintrk = function (a, b) { window.lintrk.q.push([a, b]); }; window.lintrk.q = []; }
+      var s = doc.getElementsByTagName('script')[0];
+      var b = doc.createElement('script');
+      b.type = 'text/javascript'; b.async = true;
+      b.src = 'https://snap.licdn.com/li.lms-analytics/insight.min.js';
+      s.parentNode.insertBefore(b, s);
+    })(window.lintrk);
+  }
+
+  var googleConsentSet = false;
+  function grantGoogleConsent() {
+    if (googleConsentSet) return;
+    googleConsentSet = true;
+    window.gtag('consent', 'default', {
+      ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted', analytics_storage: 'granted'
+    });
+  }
+
+  function loadGoogleAds() {
+    if (adsOn || !SETTINGS.GOOGLE_ADS_ID) return;
+    adsOn = true;
+    grantGoogleConsent();
+    window.gtag('js', new Date());
+    window.gtag('config', SETTINGS.GOOGLE_ADS_ID);
+    var s = doc.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(SETTINGS.GOOGLE_ADS_ID);
+    doc.head.appendChild(s);
+  }
+
+  function loadGTM() {
+    if (gtmOn || !SETTINGS.GTM_IDS.length) return;
+    gtmOn = true;
+    grantGoogleConsent();
+    SETTINGS.GTM_IDS.forEach(function (id) {
+      window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+      var s = doc.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtm.js?id=' + encodeURIComponent(id);
+      doc.head.appendChild(s);
+    });
+  }
+
+  function loadMarketing() {
+    if (marketingOn) return;
+    marketingOn = true;
+    (function (e, t, o, n, p, r, i) {
+      e.visitorGlobalObjectAlias = n;
+      e[e.visitorGlobalObjectAlias] = e[e.visitorGlobalObjectAlias] || function () {
+        (e[e.visitorGlobalObjectAlias].q = e[e.visitorGlobalObjectAlias].q || []).push(arguments);
+      };
+      e[e.visitorGlobalObjectAlias].l = (new Date()).getTime();
+      r = t.createElement('script'); r.src = o; r.async = true;
+      i = t.getElementsByTagName('script')[0]; i.parentNode.insertBefore(r, i);
+    })(window, doc, AC_SCRIPT, 'vgo');
+    window.vgo('setAccount', AC_ACCOUNT);
+    window.vgo('setTrackByDefault', true);
+    window.vgo('process');
+  }
+
+  function applyConsent(c) {
+    if (!c) return;
+    if (c.analytics) loadAnalytics();
+    if (c.marketing) { loadMarketing(); loadGTM(); loadMeta(); loadLinkedIn(); loadGoogleAds(); }
+  }
+
+  (function initConsentPanel() {
+    var panel = doc.getElementById('consent');
+    var stored = readConsent();
+    applyConsent(stored);
+    if (!panel) return;
+
+    var cbA = doc.getElementById('consent-analytics');
+    var cbM = doc.getElementById('consent-marketing');
+    var gaRow = panel.querySelector('[data-consent-ga]');
+    if (SETTINGS.GA_ID && gaRow) gaRow.hidden = false;
+    var hasGA = !!SETTINGS.GA_ID;
+
+    function show(focus) {
+      var c = readConsent() || {};
+      cbA.checked = !!c.analytics;
+      cbM.checked = !!c.marketing;
+      panel.hidden = false;
+      if (focus) (hasGA ? cbA : cbM).focus();
+    }
+    function save(analytics, marketing) {
+      var before = readConsent() || {};
+      var withdrew = (before.analytics && !analytics) || (before.marketing && !marketing);
+      writeConsent(analytics, marketing);
+      panel.hidden = true;
+      if (withdrew) { location.reload(); return; }   // stops anything already running on this page
+      applyConsent({ analytics: analytics, marketing: marketing });
+    }
+
+    if (!stored) show(false);
+
+    panel.addEventListener('click', function (e) {
+      var choice = e.target && e.target.getAttribute && e.target.getAttribute('data-consent');
+      if (!choice) return;
+      if (choice === 'accept') save(hasGA, true);
+      else if (choice === 'reject') save(false, false);
+      else save(hasGA && cbA.checked, cbM.checked);
+    });
+    doc.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest && e.target.closest('[data-open-consent]');
+      if (t) show(true);
+    });
+    doc.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !panel.hidden && readConsent()) panel.hidden = true;
+    });
+  })();
+
+  /* looping video: muted, with a visible pause control, plays only while on screen, never autoplays for reduced motion */
+  doc.querySelectorAll('[data-video]').forEach(function (wrap) {
+    var v = wrap.querySelector('video'), b = wrap.querySelector('.vtoggle');
+    if (!v || !b) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var userPaused = reduce;
+    function label() { b.textContent = v.paused ? 'Play video' : 'Pause video'; b.setAttribute('aria-pressed', v.paused ? 'true' : 'false'); }
+    function play() { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+    if (reduce) { v.removeAttribute('autoplay'); v.pause(); }
+    b.addEventListener('click', function () { if (v.paused) { userPaused = false; play(); } else { userPaused = true; v.pause(); } });
+    v.addEventListener('play', label); v.addEventListener('pause', label); label();
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { if (!userPaused) play(); } else v.pause(); });
+      }, { threshold: 0.25 }).observe(v);
+    }
+  });
 
   /* close the mobile menu when tapping elsewhere */
   doc.addEventListener('click', function (e) {
@@ -86,6 +258,10 @@
       if (sessionStorage.getItem('wc_lead') === '1' || fromSite) {
         sessionStorage.removeItem('wc_lead');
         track('generate_lead', { form_id: 'activecampaign-6', currency: 'CAD' });
+        if (metaOn) window.fbq('track', 'Lead');
+        if (adsOn && SETTINGS.GOOGLE_ADS_CONVERSION) window.gtag('event', 'conversion', { send_to: SETTINGS.GOOGLE_ADS_CONVERSION });
+        if (liOn && window.lintrk && SETTINGS.LINKEDIN_CONVERSION_ID) window.lintrk('track', { conversion_id: SETTINGS.LINKEDIN_CONVERSION_ID });
+        if (gtmOn) window.dataLayer.push({ event: 'generate_lead', form_id: 'activecampaign-6', currency: 'CAD' });
       }
     } catch (e) {}
   }
