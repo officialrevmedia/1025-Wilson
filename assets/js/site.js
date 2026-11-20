@@ -8,7 +8,7 @@
     GA_ID: '',
 
     // Google Tag Manager containers (site tag, Google Ads). Load only after the visitor allows Marketing.
-    GTM_IDS: ['GTM-P9QMC7WJ', 'GTM-5XNGHMRT'],
+    GTM_IDS: ['GTM-P9QMC7WJ', 'GTM-5XNGHMRT', 'GTM-M8L6H4SV'],
 
     // Meta Pixel ID. Loads only after the visitor allows Marketing.
     META_PIXEL_ID: '1601744497840545',
