@@ -305,6 +305,27 @@
     setCookie('wc_first_source', labelFor(qs.get('utm_source'), qs.get('utm_medium'), !!qs.get('gclid'), doc.referrer));
     setCookie('wc_first_campaign', qs.get('utm_campaign') || '');
   }
+  /* paid channel: the LATEST paid ad click (90 days) decides which ActiveCampaign form copy the buyer
+     form posts to, so ActiveCampaign records the lead as Paid Search or Paid Social.
+     Form 12 = organic, 30 = Paid Search copy, 32 = Paid Social copy. Broker form 20 is never changed. */
+  var AC_BUYER_FORM = '12';
+  var AC_PAID_FORMS = { 'Paid Search': '30', 'Paid Social': '32' };
+  (function () {
+    var src = (qs.get('utm_source') || '').toLowerCase(), med = (qs.get('utm_medium') || '').toLowerCase();
+    var social = /^(facebook|fb|instagram|ig|meta|linkedin|tiktok)$/.test(src);
+    var ch = '';
+    if (qs.get('gclid') || qs.get('gbraid') || qs.get('wbraid')) ch = 'Paid Search';
+    else if (qs.get('fbclid') || qs.get('ttclid') || qs.get('li_fat_id') || social ||
+             /^(paid-social|paid_social|paidsocial|social-paid|social_paid)$/.test(med)) ch = 'Paid Social';
+    else if (/^(cpc|ppc|paid|paid-search|paid_search|paidsearch|sem)$/.test(med)) ch = 'Paid Search';
+    if (ch) setCookie('wc_paid_channel', ch);
+  })();
+  function acFormFor(f) {
+    var fid = f.querySelector('input[name="f"]');
+    if (!fid || fid.value !== AC_BUYER_FORM) return;
+    var id = AC_PAID_FORMS[getCookie('wc_paid_channel')];
+    if (id) fid.value = id;   // "u" stays 12 so AC's thank-you callback still finds #_form_12_
+  }
   function attr(k) { return qs.get(k) || getCookie('wc_' + k) || ''; }
   function trafficSource() { return getCookie('wc_first_source') || labelFor(attr('utm_source'), attr('utm_medium'), !!attr('gclid'), doc.referrer); }
   function firstCampaign() { return getCookie('wc_first_campaign') || attr('utm_campaign'); }
@@ -335,8 +356,10 @@
     var ready = function (f) {
       acBox.classList.add('is-ready');
       prefill(f);
+      acFormFor(f);
       f.addEventListener('submit', function () {
         prefill(f);
+        acFormFor(f);
         try { sessionStorage.setItem('wc_lead', '1'); } catch (e) {}
       }, true);
     };
